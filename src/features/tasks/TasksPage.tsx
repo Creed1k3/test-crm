@@ -7,6 +7,7 @@ import {
   Loading,
   Notice,
   StatusPill,
+  Modal,
   initials,
 } from "../../components/ui";
 import type {
@@ -21,18 +22,35 @@ import { getSupabase } from "../../lib/supabase";
 import { useLoad } from "../../lib/useLoad";
 import { TaskForm } from "./TaskForm";
 import { TaskList } from "./TaskList";
+import { TaskCollaboration } from "./TaskCollaboration";
 
 export function MyTasksPage() {
   const { profile } = useAuth();
-  const { data: tasks, error } = useLoad<Task[]>(async () => {
+  const {
+    data: tasks,
+    error,
+    refresh,
+  } = useLoad<Task[]>(async () => {
     const { data, error } = await getSupabase()
       .from("tasks")
       .select("*")
-      .eq("assignee_id", profile!.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return data;
+    return data.filter(
+      (task) => task.assignee_id === profile!.id || task.assignee_id === null,
+    );
   }, [profile?.id]);
+  useEffect(() => {
+    const update = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [refresh]);
   const groups: Status[] = [
     "new",
     "in_progress",
@@ -56,8 +74,27 @@ export function MyTasksPage() {
         />
       ) : (
         <div className="my-task-groups">
+          {tasks.some((task) => task.assignee_id === null) && (
+            <section className="my-task-group">
+              <h2>
+                Доступные задачи{" "}
+                <span className="group-count">
+                  {tasks.filter((task) => task.assignee_id === null).length}
+                </span>
+              </h2>
+              <p className="muted available-hint">
+                Задача станет вашей, когда вы возьмёте её в работу.
+              </p>
+              <TaskList
+                tasks={tasks.filter((task) => task.assignee_id === null)}
+              />
+            </section>
+          )}
           {groups.map((status) => {
-            const list = tasks.filter((task) => task.status === status);
+            const list = tasks.filter(
+              (task) =>
+                task.assignee_id === profile?.id && task.status === status,
+            );
             return (
               list.length > 0 && (
                 <section className="my-task-group" key={status}>
@@ -137,9 +174,14 @@ export function TaskPage() {
   );
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [actionError, setActionError] = useState("");
+  const [unavailableTaskId, setUnavailableTaskId] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const canClaim =
+    !!task && profile?.role === "performer" && task.assignee_id === null;
   const performerCanAct =
     !!task &&
     task.assignee_id === profile?.id &&
@@ -158,11 +200,41 @@ export function TaskPage() {
     if (error) setActionError(error.message);
     else {
       setComment("");
+      if (status === "rework") setReturnOpen(false);
       refresh();
       history.refresh();
     }
   }
 
+  async function claim() {
+    setBusy(true);
+    setActionError("");
+    const { error } = await getSupabase().rpc("claim_task", { p_task_id: id });
+    setBusy(false);
+    if (error) {
+      if (error.message.includes("Task not found")) {
+        setUnavailableTaskId(id);
+      } else {
+        setActionError(
+          "Не удалось взять задачу. Проверьте соединение и повторите попытку.",
+        );
+      }
+      refresh();
+    } else {
+      refresh();
+      history.refresh();
+    }
+  }
+
+  if (unavailableTaskId === id)
+    return (
+      <main className="content">
+        <Notice bad>
+          Эта задача больше недоступна.{" "}
+          <Link to="/my-tasks">Вернуться к моим и доступным задачам</Link>
+        </Notice>
+      </main>
+    );
   if (error)
     return (
       <main className="content">
@@ -222,6 +294,16 @@ export function TaskPage() {
               {task.description || "Описание не добавлено."}
             </p>
           </div>
+          <TaskCollaboration
+            task={task}
+            uploading={uploading}
+            setUploading={setUploading}
+            canUpload={
+              manager ||
+              (task.assignee_id === profile?.id &&
+                ["in_progress", "rework"].includes(task.status))
+            }
+          />
           <div className="detail-section">
             <h2>История изменений</h2>
             {history.error && <Notice bad>{history.error}</Notice>}
@@ -270,13 +352,33 @@ export function TaskPage() {
                 {object.data?.title ?? "Открыть объект"} →
               </Link>
             </Detail>
-            <PersonDetail label="Исполнитель" personId={task.assignee_id} />
+            {task.assignee_id ? (
+              <PersonDetail label="Исполнитель" personId={task.assignee_id} />
+            ) : (
+              <Detail label="Исполнитель">Ожидает исполнителя</Detail>
+            )}
+            {manager && task.assignment_mode === "open" && (
+              <Detail label="Распределение">
+                Общая задача — доступна всем исполнителям
+              </Detail>
+            )}
+            {manager && task.assignment_mode === "candidates" && (
+              <CandidateDetail taskId={task.id} />
+            )}
             <PersonDetail label="Постановщик" personId={task.author_id} />
           </div>
-          {(managerCanAct || performerCanAct) && (
+          {(managerCanAct || performerCanAct || canClaim) && (
             <div className="side-section actions-section">
               <h2>Действия</h2>
-              {managerCanAct ? (
+              {canClaim ? (
+                <button
+                  className="button primary full"
+                  disabled={busy}
+                  onClick={() => void claim()}
+                >
+                  Взять в работу
+                </button>
+              ) : managerCanAct ? (
                 <>
                   <button
                     className="button success full"
@@ -285,19 +387,10 @@ export function TaskPage() {
                   >
                     Принять задачу
                   </button>
-                  <label className="comment-label">
-                    Комментарий для возврата
-                    <textarea
-                      rows={3}
-                      value={comment}
-                      onChange={(event) => setComment(event.target.value)}
-                      placeholder="Что нужно исправить?"
-                    />
-                  </label>
                   <button
-                    className="button secondary full"
-                    disabled={busy || !comment.trim()}
-                    onClick={() => void transition("rework")}
+                    className="button destructive full"
+                    disabled={busy}
+                    onClick={() => setReturnOpen(true)}
                   >
                     Вернуть на доработку
                   </button>
@@ -305,10 +398,10 @@ export function TaskPage() {
               ) : task.status === "in_progress" ? (
                 <button
                   className="button primary full"
-                  disabled={busy}
+                  disabled={busy || uploading}
                   onClick={() => void transition("in_review")}
                 >
-                  Отправить на проверку
+                  {uploading ? "Загружаем вложения…" : "Отправить на проверку"}
                 </button>
               ) : (
                 <button
@@ -335,6 +428,50 @@ export function TaskPage() {
             refresh();
           }}
         />
+      )}
+      {returnOpen && (
+        <Modal
+          title="Комментарий для возврата"
+          onClose={() => setReturnOpen(false)}
+          closeDisabled={busy}
+        >
+          {actionError && <Notice bad>{actionError}</Notice>}
+          <form
+            className="form-stack"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (comment.trim()) void transition("rework");
+            }}
+          >
+            <label>
+              Что нужно исправить?
+              <textarea
+                autoFocus
+                rows={4}
+                required
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                placeholder="Опишите, что нужно доработать"
+              />
+            </label>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={() => setReturnOpen(false)}
+              >
+                Отмена
+              </button>
+              <button
+                className="button destructive"
+                disabled={busy || !comment.trim()}
+              >
+                {busy ? "Возвращаем…" : "Вернуть на доработку"}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
       {confirmDelete && (
         <ConfirmDialog
@@ -399,6 +536,37 @@ function PersonDetail({
         <span className="avatar small-avatar">{initials(name || "?")}</span>
         {name || "Загрузка…"}
       </span>
+    </Detail>
+  );
+}
+
+function CandidateDetail({ taskId }: { taskId: string }) {
+  const candidates = useLoad<string[]>(async () => {
+    const { data, error } = await getSupabase()
+      .from("task_candidates")
+      .select("performer_id")
+      .eq("task_id", taskId);
+    if (error) throw error;
+    return data.map(({ performer_id }) => performer_id);
+  }, [taskId]);
+  const ids = candidates.data ?? [];
+  const people = useLoad<Profile[]>(async () => {
+    if (!ids.length) return [];
+    const { data, error } = await getSupabase()
+      .from("profiles")
+      .select("*")
+      .in("id", ids);
+    if (error) throw error;
+    return data;
+  }, [ids.join(",")]);
+  return (
+    <Detail label="Кто может взять задачу">
+      {candidates.error || people.error
+        ? "Не удалось загрузить список"
+        : !people.data
+          ? "Загрузка…"
+          : people.data.map((person) => person.display_name).join(", ") ||
+            "Нет выбранных исполнителей"}
     </Detail>
   );
 }
