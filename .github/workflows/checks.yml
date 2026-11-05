@@ -22,10 +22,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: npx --yes supabase@3.0.0 db start
-      - run: psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/security.sql
+      - run: npm ci
+      - run: npx --yes supabase@3.0.0 start
+      - run: psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/security.sql -f supabase/tests/collaboration_security.sql
         env:
           PGPASSWORD: postgres
+      - name: Test the workflow through the API
+        run: |
+          npx --yes supabase@3.0.0 status -o env > "$RUNNER_TEMP/supabase.env"
+          node --env-file="$RUNNER_TEMP/supabase.env" supabase/tests/workflow.mjs
 
   build:
     runs-on: ubuntu-latest
@@ -47,7 +52,7 @@ jobs:
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: build
+    needs: [build, database]
     runs-on: ubuntu-latest
     permissions:
       pages: write
