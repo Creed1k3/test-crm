@@ -1,0 +1,14 @@
+project_id = "test-crm"
+
+[api]
+schemas = ["public", "graphql_public"]
+
+[db]
+port = 54322
+
+[db.seed]
+enabled = false
+
+[auth]
+enable_signup = false
+enable_anonymous_sign_ins = false
