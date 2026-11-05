@@ -45,6 +45,7 @@ update public.tasks set description = 'Edited description' where title = 'Test t
 select pg_temp.assert_true((select address = 'Edited address' from public.objects where title = 'Test object 1'), 'manager edits object');
 select pg_temp.assert_true((select description = 'Edited description' from public.tasks where title = 'Test task 1'), 'manager edits task');
 select pg_temp.assert_true((select count(*) = 3 from public.tasks where title like 'Test task %'), 'manager sees tasks');
+select pg_temp.assert_true((select count(*) = 3 from public.profiles where id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000003')), 'manager sees all profiles');
 select pg_temp.assert_true((select count(*) = 3 from public.task_status_history h join public.tasks t on t.id = h.task_id where t.title like 'Test task %' and h.from_status is null and h.to_status = 'new'), 'creation history');
 select set_config('test.other_task_id', (select id::text from public.tasks where title = 'Test task 2'), true);
 select pg_temp.expect_error($q$insert into public.tasks(title, object_id, assignee_id) select 'Invalid', id, '10000000-0000-0000-0000-000000000001' from public.objects where title = 'Test object 1'$q$, 'manager cannot be an assignee');
@@ -62,6 +63,9 @@ select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002
 select pg_temp.assert_true((select count(*) = 1 from public.tasks where title like 'Test task %'), 'performer sees only assigned tasks');
 select pg_temp.assert_true((select count(*) = 1 from public.objects where title like 'Test object %'), 'performer sees only assigned objects');
 select pg_temp.assert_true((select count(*) = 1 from public.task_status_history h join public.tasks t on t.id = h.task_id where t.title like 'Test task %'), 'performer sees only assigned history');
+select pg_temp.assert_true((select count(*) = 1 from public.profiles where id = '10000000-0000-0000-0000-000000000002'), 'performer sees own profile');
+select pg_temp.assert_true((select count(*) = 1 from public.profiles where id = '10000000-0000-0000-0000-000000000001'), 'performer sees task author');
+select pg_temp.assert_true((select count(*) = 0 from public.profiles where id = '10000000-0000-0000-0000-000000000003'), 'unrelated performer profile hidden');
 select pg_temp.assert_true((select count(*) = 0 from public.tasks where id = current_setting('test.other_task_id')::uuid), 'foreign task inaccessible by id');
 select pg_temp.assert_true((select count(*) = 0 from public.task_status_history where task_id = current_setting('test.other_task_id')::uuid), 'foreign history inaccessible without join');
 select pg_temp.expect_failure(format('select public.transition_task(%L::uuid, %L)', current_setting('test.other_task_id'), 'in_progress'), 'P0001', 'Task not found');
@@ -94,6 +98,7 @@ select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003
 select pg_temp.assert_true((select count(*) = 3 from public.tasks where title like 'Test task %'), 'second performer sees assigned tasks after reassignment');
 select pg_temp.assert_true((select count(*) = 2 from public.objects where title like 'Test object %'), 'second performer sees both objects');
 select pg_temp.assert_true((select count(*) = 9 from public.task_status_history), 'second performer sees assigned history');
+select pg_temp.assert_true((select count(*) = 1 from public.profiles where id = '10000000-0000-0000-0000-000000000002'), 'second performer sees past actor after reassignment');
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
 select public.delete_task(id) from public.tasks where title = 'Test task 1';
 select public.delete_object(id) from public.objects where title = 'Test object 2';
