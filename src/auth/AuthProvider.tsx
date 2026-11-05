@@ -70,7 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true;
-    setProfileResult({ userId: user.id, profile: null, error: "" });
     void (async () => {
       try {
         const { data, error: queryError } = await supabase

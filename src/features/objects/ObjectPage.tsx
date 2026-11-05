@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
-import { Empty, Loading, Notice } from "../../components/ui";
+import { ConfirmDialog, Empty, Loading, Notice } from "../../components/ui";
 import type { ObjectRow, Task } from "../../lib/database";
 import { getSupabase } from "../../lib/supabase";
 import { useLoad } from "../../lib/useLoad";
@@ -16,7 +16,7 @@ export function ObjectPage() {
   const manager = profile?.role === "manager";
   const [editing, setEditing] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
-  const [actionError, setActionError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const {
     data: object,
     error,
@@ -41,21 +41,11 @@ export function ObjectPage() {
     return data;
   }, [id]);
 
-  async function remove() {
-    if (!window.confirm("Удалить объект?")) return;
-    const { error: deleteError } = await getSupabase().rpc("delete_object", {
-      p_object_id: id,
-    });
-    if (deleteError) setActionError(deleteError.message);
-    else navigate("/objects", { replace: true });
-  }
-
   return (
     <main className="content">
       <Link className="back-link" to="/objects">
         ← Все объекты
       </Link>
-      {actionError && <Notice bad>{actionError}</Notice>}
       {error ? (
         <Notice bad>{error}</Notice>
       ) : !object ? (
@@ -77,7 +67,7 @@ export function ObjectPage() {
                 </button>
                 <button
                   className="button quiet danger-text"
-                  onClick={() => void remove()}
+                  onClick={() => setConfirmDelete(true)}
                 >
                   Удалить
                 </button>
@@ -133,6 +123,21 @@ export function ObjectPage() {
           onSaved={() => {
             setCreatingTask(false);
             tasksQuery.refresh();
+          }}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Удалить объект?"
+          description="Объект и его задачи станут недоступны участникам. История изменений сохранится."
+          confirmLabel="Удалить объект"
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={async () => {
+            const { error } = await getSupabase().rpc("delete_object", {
+              p_object_id: id,
+            });
+            if (error) throw error;
+            navigate("/objects", { replace: true });
           }}
         />
       )}

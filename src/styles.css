@@ -203,6 +203,13 @@ h2 {
 .success:hover {
   background: #207457;
 }
+.destructive {
+  color: #fff;
+  background: #c44d53;
+}
+.destructive:hover {
+  background: #a93e44;
+}
 .full {
   width: 100%;
 }
@@ -458,6 +465,12 @@ h2 {
 }
 .modal-head h2 {
   font-size: 19px;
+}
+.confirm-copy {
+  color: #65707d;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 20px;
 }
 .form-stack {
   display: grid;

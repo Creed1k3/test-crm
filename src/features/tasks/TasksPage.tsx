@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider";
 import {
   Empty,
+  ConfirmDialog,
   Loading,
   Notice,
   StatusPill,
@@ -135,6 +136,7 @@ export function TaskPage() {
     [actors.data],
   );
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [comment, setComment] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -159,13 +161,6 @@ export function TaskPage() {
       refresh();
       history.refresh();
     }
-  }
-
-  async function remove() {
-    if (!window.confirm("Удалить задачу?")) return;
-    const { error } = await getSupabase().rpc("delete_task", { p_task_id: id });
-    if (error) setActionError(error.message);
-    else navigate("/objects", { replace: true });
   }
 
   if (error)
@@ -211,7 +206,7 @@ export function TaskPage() {
             </button>
             <button
               className="button quiet danger-text"
-              onClick={() => void remove()}
+              onClick={() => setConfirmDelete(true)}
             >
               Удалить
             </button>
@@ -338,6 +333,21 @@ export function TaskPage() {
           onSaved={() => {
             setEditing(false);
             refresh();
+          }}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Удалить задачу?"
+          description="Задача исчезнет из списков. История изменений сохранится в системе."
+          confirmLabel="Удалить задачу"
+          onClose={() => setConfirmDelete(false)}
+          onConfirm={async () => {
+            const { error } = await getSupabase().rpc("delete_task", {
+              p_task_id: id,
+            });
+            if (error) throw error;
+            navigate("/objects", { replace: true });
           }}
         />
       )}

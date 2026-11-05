@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { statusLabel, type Status } from "../lib/database";
 
 export function Notice({
@@ -49,11 +49,13 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  closeDisabled = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  closeDisabled?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const headingId = useId();
@@ -68,8 +70,12 @@ export function Modal({
       className={wide ? "modal wide-modal" : "modal"}
       aria-labelledby={headingId}
       onClose={onClose}
+      onCancel={(event) => {
+        if (closeDisabled) event.preventDefault();
+      }}
       onClick={(event) => {
-        if (event.target === ref.current) ref.current?.close();
+        if (!closeDisabled && event.target === ref.current)
+          ref.current?.close();
       }}
     >
       <div className="modal-head">
@@ -77,6 +83,7 @@ export function Modal({
         <button
           type="button"
           className="icon-button"
+          disabled={closeDisabled}
           onClick={() => ref.current?.close()}
           aria-label="Закрыть"
         >
@@ -85,6 +92,65 @@ export function Modal({
       </div>
       {children}
     </dialog>
+  );
+}
+
+export function ConfirmDialog({
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pending = useRef(false);
+
+  async function confirm() {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await onConfirm();
+      onClose();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={title} onClose={onClose} closeDisabled={busy}>
+      <p className="confirm-copy">{description}</p>
+      {error && <Notice bad>{error}</Notice>}
+      <div className="form-actions">
+        <button
+          type="button"
+          className="button secondary"
+          disabled={busy}
+          onClick={onClose}
+        >
+          Отмена
+        </button>
+        <button
+          type="button"
+          className="button destructive"
+          disabled={busy}
+          onClick={() => void confirm()}
+        >
+          {busy ? "Удаляем…" : confirmLabel}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

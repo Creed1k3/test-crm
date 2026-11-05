@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Modal, Notice, Empty, Loading } from "../../components/ui";
+import {
+  ConfirmDialog,
+  Modal,
+  Notice,
+  Empty,
+  Loading,
+} from "../../components/ui";
 import { useAuth } from "../../auth/AuthProvider";
 import type { ObjectRow } from "../../lib/database";
 import { getSupabase } from "../../lib/supabase";
@@ -10,8 +16,8 @@ export function ObjectsPage() {
   const { profile } = useAuth();
   const manager = profile?.role === "manager";
   const [editing, setEditing] = useState<ObjectRow | null | false>(false);
+  const [deleteTarget, setDeleteTarget] = useState<ObjectRow | null>(null);
   const [message, setMessage] = useState("");
-  const [actionError, setActionError] = useState("");
   const load = async () => {
     const { data, error } = await getSupabase()
       .from("objects")
@@ -22,15 +28,6 @@ export function ObjectsPage() {
   };
   const { data: objects, error, refresh } = useLoad(load, []);
 
-  async function remove(id: string) {
-    if (!window.confirm("Удалить объект?")) return;
-    const { error: deleteError } = await getSupabase().rpc("delete_object", {
-      p_object_id: id,
-    });
-    if (deleteError) setActionError(deleteError.message);
-    else refresh();
-  }
-
   return (
     <main className="content">
       <div className="page-heading">
@@ -39,7 +36,6 @@ export function ObjectsPage() {
           <button
             className="button primary"
             onClick={() => {
-              setActionError("");
               setEditing(null);
             }}
           >
@@ -47,7 +43,6 @@ export function ObjectsPage() {
           </button>
         )}
       </div>
-      {actionError && <Notice bad>{actionError}</Notice>}
       {message && <Notice>{message}</Notice>}
       {error && <Notice bad>{error}</Notice>}
       {!objects ? (
@@ -89,7 +84,7 @@ export function ObjectsPage() {
                   <button
                     className="icon-button danger-text"
                     aria-label={`Удалить ${object.title}`}
-                    onClick={() => void remove(object.id)}
+                    onClick={() => setDeleteTarget(object)}
                   >
                     ⌫
                   </button>
@@ -106,6 +101,21 @@ export function ObjectsPage() {
           onSaved={() => {
             setEditing(false);
             setMessage("Объект сохранён.");
+            refresh();
+          }}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Удалить объект?"
+          description="Объект и его задачи станут недоступны участникам. История изменений сохранится."
+          confirmLabel="Удалить объект"
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            const { error } = await getSupabase().rpc("delete_object", {
+              p_object_id: deleteTarget.id,
+            });
+            if (error) throw error;
             refresh();
           }}
         />
