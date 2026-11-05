@@ -730,8 +730,13 @@ h2 {
   .detail-side {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    grid-row: 1;
     align-items: start;
     gap: 12px;
+    margin-bottom: 24px;
+  }
+  .actions-section {
+    order: -1;
   }
   .side-section {
     margin: 0;
@@ -761,8 +766,15 @@ h2 {
 }
 @media (max-width: 520px) {
   .topbar {
-    height: 60px;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: auto;
+    padding: 10px 15px;
+    gap: 8px 12px;
+  }
+  .topbar nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
   .brand {
     font-size: 15px;
@@ -776,6 +788,8 @@ h2 {
     font-size: 12px;
   }
   .account {
+    grid-column: 2;
+    grid-row: 1;
     gap: 6px;
   }
   .account .button {
@@ -788,6 +802,13 @@ h2 {
   }
   h1 {
     font-size: 27px;
+  }
+  h1,
+  .row-main strong,
+  .task-row-info strong,
+  .description-text,
+  .timeline blockquote {
+    overflow-wrap: anywhere;
   }
   .page-heading {
     gap: 12px;
