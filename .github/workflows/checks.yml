@@ -19,10 +19,10 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
-      - uses: supabase/setup-cli@v3
+      - uses: actions/setup-node@v7
         with:
-          version: 3.0.0
-      - run: supabase db start
+          node-version: 24
+      - run: npx --yes supabase@3.0.0 db start
       - run: psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/tests/security.sql
         env:
           PGPASSWORD: postgres
@@ -47,7 +47,7 @@ jobs:
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [build, database]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       pages: write
